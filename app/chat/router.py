@@ -73,6 +73,24 @@ def _get_openai_client() -> AsyncOpenAI | None:
 
 
 # ---------------------------------------------------------------
+# 0. 삐빅이 시그니처 — 모든 답변은 "삐빅!"으로 시작한다
+# ---------------------------------------------------------------
+
+BOT_PREFIX = "삐빅! "
+
+
+def _bibik(reply: str) -> str:
+    """
+    레이더 효과음 접두어. LLM 생성/템플릿/고정 문구 어디서 온 답변이든
+    응답 직전에 일괄 적용한다 — 프롬프트로 시키면 LLM이 가끔 까먹는다.
+    (LLM이 이미 붙여서 답한 경우 중복 방지)
+    """
+    if reply.lstrip().startswith("삐빅"):
+        return reply
+    return BOT_PREFIX + reply
+
+
+# ---------------------------------------------------------------
 # 1. 인사 판별 (로컬 규칙 — LLM 호출 없이 0원 처리)
 # ---------------------------------------------------------------
 
@@ -212,7 +230,8 @@ async def _generate_grounded_reply(
 # 검색 결과가 0건이거나 검색 의도가 없을 때 쓰는 프롬프트.
 # 감정 표현("아 배고파"), 미등록 장소 질문("OO식당 어디야?"), 잡담을 한 번에 처리한다.
 UNGROUNDED_SYSTEM_PROMPT = (
-    "너는 대전 지역 시설·장소 안내 챗봇 '동네레이더'다. "
+    "너는 대전 지역 시설·장소 안내 챗봇 '동네레이더'의 마스코트 '삐빅이'다. "
+    "이름을 물으면 삐빅이라고 답해라. "
     "사용자의 메시지에 대해 답변에 쓸 장소 데이터가 없는 상황이다. 상황에 맞게 답해라:\n"
     "- 감정·상태 표현(배고파, 심심해, 피곤해, 더워 등)이면: 한 문장으로 가볍게 공감해 주고, "
     "그 상태와 어울리는 장소(배고프면 맛집·식당, 심심하면 관광지·문화시설, 더우면 카페 등)를 "
@@ -384,7 +403,7 @@ async def chat_with_bot(
     #    "레이더에 비는 곳 → 요청 글 올리기" UX로 연결한다.
     if not reports and not places and _has_search_terms(intent, request):
         return ChatResponse(
-            reply=EMPTY_CONTEXT_REPLY,
+            reply=_bibik(EMPTY_CONTEXT_REPLY),
             sources=[],
             suggest_report=True,
             suggested_facility=intent.facility,
@@ -396,7 +415,7 @@ async def chat_with_bot(
     if not reports and not places:
         # 3-a) 짧은 인사 → 고정 응답 (LLM 0콜)
         if _is_local_greeting(message):
-            return ChatResponse(reply=GREETING_REPLY, sources=[], suggest_report=False)
+            return ChatResponse(reply=_bibik(GREETING_REPLY), sources=[], suggest_report=False)
 
         # 3-b) 일반 키워드로 2차 검색 ("성심당 알려줘" 같은 고유명사 대비)
         fallback_keywords = _extract_fallback_keywords(message)
@@ -416,7 +435,7 @@ async def chat_with_bot(
         if reply is None:
             reply = _build_template_reply(reports, places, intent)
         return ChatResponse(
-            reply=reply,
+            reply=_bibik(reply),
             sources=build_sources(
                 reports, places, request.latitude, request.longitude
             ),
@@ -437,18 +456,18 @@ async def chat_with_bot(
         # 키 없음/호출 실패: 2차 검색까지 했으면 제보 유도, 아니면 사용 안내
         if searched_fallback:
             return ChatResponse(
-                reply=EMPTY_CONTEXT_REPLY,
+                reply=_bibik(EMPTY_CONTEXT_REPLY),
                 sources=[],
                 suggest_report=True,
                 suggested_facility=suggested,
                 suggestions=_suggestion_chips(intent.facility),
             )
         return ChatResponse(
-            reply=FALLBACK_GUIDE_REPLY, sources=[], suggest_report=False
+            reply=_bibik(FALLBACK_GUIDE_REPLY), sources=[], suggest_report=False
         )
 
     return ChatResponse(
-        reply=reply,
+        reply=_bibik(reply),
         sources=[],
         suggest_report=searched_fallback,
         suggested_facility=suggested,
